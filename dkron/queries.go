@@ -1,7 +1,6 @@
 package dkron
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -49,34 +48,47 @@ func (a *Agent) RunQuery(jobName string, ex *Execution) (*Job, error) {
 
 	// In the first execution attempt we build and filter the target nodes
 	// but we use the existing node target in case of retry.
+	filterMap := map[string]bool{}
 	if ex.Attempt <= 1 {
-		filterNodes, filterTags, err := a.processFilteredNodes(job)
+		fn, _, err := a.processFilteredNodes(job)
 		if err != nil {
 			return nil, fmt.Errorf("agent: RunQuery error processing filtered nodes: %w", err)
 		}
-		log.Debug("agent: Filtered nodes to run: ", filterNodes)
-		log.Debug("agent: Filtered tags to run: ", filterTags)
+
+		for _, n := range fn {
+			filterMap[n] = true
+		}
+		// log.Debug("agent: Filtered tags to run: ", filterTags)
 
 		//serf match regexp but we want only match full tag
-		serfFilterTags := make(map[string]string)
-		for key, val := range filterTags {
-			b := new(bytes.Buffer)
-			b.WriteString("^")
-			b.WriteString(val)
-			b.WriteString("$")
-			serfFilterTags[key] = b.String()
-		}
+		// serfFilterTags := make(map[string]string)
+		// for key, val := range filterTags {
+		// 	b := new(bytes.Buffer)
+		// 	b.WriteString("^")
+		// 	b.WriteString(val)
+		// 	b.WriteString("$")
+		// 	serfFilterTags[key] = b.String()
+		// }
 
-		params = &serf.QueryParam{
-			FilterNodes: filterNodes,
-			FilterTags:  serfFilterTags,
-			RequestAck:  true,
-		}
+		// params = &serf.QueryParam{
+		// 	FilterNodes: filterNodes,
+		// 	// FilterTags:  serfFilterTags,
+		// 	RequestAck: true,
+		// }
 	} else {
-		params = &serf.QueryParam{
-			FilterNodes: []string{ex.NodeName},
-			RequestAck:  true,
-		}
+		filterMap = map[string]bool{ex.NodeName: true}
+	}
+
+Retry:
+	var filterNodes []string
+	for k := range filterMap {
+		filterNodes = append(filterNodes, k)
+	}
+	log.Debug("agent: Filtered nodes to run: ", filterNodes)
+
+	params = &serf.QueryParam{
+		FilterNodes: filterNodes,
+		RequestAck:  true,
 	}
 
 	rqp := &RunQueryParam{
@@ -114,6 +126,7 @@ func (a *Agent) RunQuery(jobName string, ex *Execution) (*Job, error) {
 					"from":  ack,
 				}).Debug("agent: Received ack")
 			}
+			delete(filterMap, ack)
 		case resp, ok := <-respCh:
 			if ok {
 				log.WithFields(logrus.Fields{
@@ -128,6 +141,10 @@ func (a *Agent) RunQuery(jobName string, ex *Execution) (*Job, error) {
 		"time":  time.Since(start),
 		"query": QueryRunJob,
 	}).Debug("agent: Done receiving acks and responses")
+
+	if len(filterMap) > 0 {
+		goto Retry
+	}
 
 	return job, nil
 }

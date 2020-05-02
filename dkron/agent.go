@@ -725,32 +725,32 @@ func (a *Agent) processFilteredNodes(job *Job) ([]string, map[string]string, err
 	tags["region"] = a.config.Region
 
 	for jtk, jtv := range tags {
-		var tc []string
-		if tc = strings.Split(jtv, ":"); len(tc) == 2 {
-			tv := tc[0]
+		tc := strings.Split(jtv, ":")
 
-			// Set original tag to clean tag
-			tags[jtk] = tv
+		tv := tc[0]
 
+		// Set original tag to clean tag
+		tags[jtk] = tv
+
+		for _, member := range a.serf.Members() {
+			if member.Status == serf.StatusAlive {
+				for mtk, mtv := range member.Tags {
+					if mtk == jtk && mtv == tv {
+						candidates = append(candidates, member.Name)
+					}
+				}
+			}
+		}
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(len(candidates), func(i, j int) {
+			candidates[i], candidates[j] = candidates[j], candidates[i]
+		})
+
+		if len(tc) == 2 {
 			count, err := strconv.Atoi(tc[1])
 			if err != nil {
 				return nil, nil, err
 			}
-
-			for _, member := range a.serf.Members() {
-				if member.Status == serf.StatusAlive {
-					for mtk, mtv := range member.Tags {
-						if mtk == jtk && mtv == tv {
-							candidates = append(candidates, member.Name)
-						}
-					}
-				}
-			}
-			rand.Seed(time.Now().UnixNano())
-			rand.Shuffle(len(candidates), func(i, j int) {
-				candidates[i], candidates[j] = candidates[j], candidates[i]
-			})
-
 			for i := 1; i <= count; i++ {
 				if len(candidates) == 0 {
 					break
@@ -758,8 +758,8 @@ func (a *Agent) processFilteredNodes(job *Job) ([]string, map[string]string, err
 				nodes = append(nodes, candidates[0])
 				candidates = candidates[1:]
 			}
-			candidates = nil
-
+		} else {
+			nodes = candidates
 		}
 	}
 
