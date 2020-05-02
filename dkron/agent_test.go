@@ -157,13 +157,35 @@ func Test_processFilteredNodes(t *testing.T) {
 	}
 
 	nodes, tags, err := a1.processFilteredNodes(job)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	assert.Contains(t, nodes, "test1")
 	assert.Contains(t, nodes, "test2")
+	assert.Len(t, nodes, 2)
 	assert.Equal(t, tags["tag"], "test")
+
+	job2 := &Job{
+		Name: "test_job_2",
+		Tags: map[string]string{
+			"tag": "test:1",
+		},
+	}
+
+	nodes, _, err = a1.processFilteredNodes(job2)
+	require.NoError(t, err)
+
+	assert.Len(t, nodes, 1)
+
+	job3 := &Job{
+		Name: "test_job_2",
+	}
+
+	nodes, _, err = a1.processFilteredNodes(job3)
+	require.NoError(t, err)
+
+	assert.Len(t, nodes, 2)
+	assert.Contains(t, nodes, "test1")
+	assert.Contains(t, nodes, "test2")
 
 	a1.Stop()
 	a2.Stop()

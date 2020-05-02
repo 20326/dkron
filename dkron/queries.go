@@ -50,14 +50,14 @@ func (a *Agent) RunQuery(jobName string, ex *Execution) (*Job, error) {
 	// but we use the existing node target in case of retry.
 	filterMap := map[string]bool{}
 	if ex.Attempt <= 1 {
-		fn, _, err := a.processFilteredNodes(job)
+		filterMap, _, err = a.processFilteredNodes(job)
 		if err != nil {
 			return nil, fmt.Errorf("agent: RunQuery error processing filtered nodes: %w", err)
 		}
 
-		for _, n := range fn {
-			filterMap[n] = true
-		}
+		// for _, n := range fn {
+		// 	filterMap[n] = true
+		// }
 		// log.Debug("agent: Filtered tags to run: ", filterTags)
 
 		//serf match regexp but we want only match full tag

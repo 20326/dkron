@@ -23,6 +23,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
+	"github.com/juliangruber/go-intersect"
 	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
 )
@@ -710,9 +711,9 @@ func (a *Agent) join(addrs []string, replay bool) (n int, err error) {
 	return
 }
 
-func (a *Agent) processFilteredNodes(job *Job) ([]string, map[string]string, error) {
-	var nodes []string
-	var candidates []string
+func (a *Agent) processFilteredNodes(job *Job) (map[string]bool, map[string]string, error) {
+	// candidates will contain a set of candidates by tags
+	// the final set of nodes will be the intesection of all groups
 	tags := make(map[string]string)
 
 	// Actually copy the map
@@ -724,7 +725,9 @@ func (a *Agent) processFilteredNodes(job *Job) ([]string, map[string]string, err
 	// on the same region.
 	tags["region"] = a.config.Region
 
+	candidates := [][]string{}
 	for jtk, jtv := range tags {
+		cans := []string{}
 		tc := strings.Split(jtv, ":")
 
 		tv := tc[0]
@@ -736,31 +739,51 @@ func (a *Agent) processFilteredNodes(job *Job) ([]string, map[string]string, err
 			if member.Status == serf.StatusAlive {
 				for mtk, mtv := range member.Tags {
 					if mtk == jtk && mtv == tv {
-						candidates = append(candidates, member.Name)
+						cans = append(cans, member.Name)
 					}
 				}
 			}
 		}
-		rand.Seed(time.Now().UnixNano())
-		rand.Shuffle(len(candidates), func(i, j int) {
-			candidates[i], candidates[j] = candidates[j], candidates[i]
-		})
 
+		// In case there is cardinality in the tag, randomize the order and select the amount of nodes
+		// or else just add all nodes to the result.
 		if len(tc) == 2 {
+			f := []string{}
+			rand.Seed(time.Now().UnixNano())
+			rand.Shuffle(len(cans), func(i, j int) {
+				cans[i], cans[j] = cans[j], cans[i]
+			})
+
 			count, err := strconv.Atoi(tc[1])
 			if err != nil {
 				return nil, nil, err
 			}
 			for i := 1; i <= count; i++ {
-				if len(candidates) == 0 {
+				if len(cans) == 0 {
 					break
 				}
-				nodes = append(nodes, candidates[0])
-				candidates = candidates[1:]
+				f = append(f, cans[0])
+				cans = cans[1:]
 			}
-		} else {
-			nodes = candidates
+			cans = f
 		}
+		if len(cans) > 0 {
+			candidates = append(candidates, cans)
+		}
+	}
+
+	// The final result will be the interesection of all candidates.
+	nodes := make(map[string]bool)
+	r := candidates[0]
+	for i := 1; i <= len(candidates)-1; i++ {
+		isec := intersect.Simple(r, candidates[i]).([]interface{})
+		for i, v := range isec {
+			r[i] = v.(string)
+		}
+	}
+
+	for _, n := range r {
+		nodes[n] = true
 	}
 
 	return nodes, tags, nil
