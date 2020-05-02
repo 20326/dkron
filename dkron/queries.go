@@ -79,6 +79,7 @@ func (a *Agent) RunQuery(jobName string, ex *Execution) (*Job, error) {
 		filterMap = map[string]bool{ex.NodeName: true}
 	}
 
+	retry := 0
 Retry:
 	var filterNodes []string
 	for k := range filterMap {
@@ -143,7 +144,11 @@ Retry:
 	}).Debug("agent: Done receiving acks and responses")
 
 	if len(filterMap) > 0 {
-		goto Retry
+		if retry < 10 {
+			retry++
+			goto Retry
+		}
+		log.WithField("nodes", filterMap).Error("agent: error trying to run job in nodes after 10 retries, giving up")
 	}
 
 	return job, nil
