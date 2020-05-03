@@ -80,6 +80,13 @@ func (a *Agent) RunQuery(jobName string, ex *Execution) (*Job, error) {
 	}
 
 	retry := 0
+
+	rqp := &RunQueryParam{
+		Execution: ex,
+		RPCAddr:   a.getRPCAddr(),
+	}
+	rqpJSON, _ := json.Marshal(rqp)
+
 Retry:
 	var filterNodes []string
 	for k := range filterMap {
@@ -91,12 +98,6 @@ Retry:
 		FilterNodes: filterNodes,
 		RequestAck:  true,
 	}
-
-	rqp := &RunQueryParam{
-		Execution: ex,
-		RPCAddr:   a.getRPCAddr(),
-	}
-	rqpJSON, _ := json.Marshal(rqp)
 
 	log.WithFields(logrus.Fields{
 		"query":    QueryRunJob,
@@ -146,6 +147,7 @@ Retry:
 	if len(filterMap) > 0 {
 		if retry < 10 {
 			retry++
+			log.WithField("nodes", filterMap).Error("agent: error trying to run job in nodes, retrying")
 			goto Retry
 		}
 		log.WithField("nodes", filterMap).Error("agent: error trying to run job in nodes after 10 retries, giving up")

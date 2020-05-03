@@ -772,13 +772,17 @@ func (a *Agent) processFilteredNodes(job *Job) (map[string]bool, map[string]stri
 		}
 	}
 
-	// The final result will be the interesection of all candidates.
+	// The final result will be the intersection of all candidates.
 	nodes := make(map[string]bool)
 	r := candidates[0]
 	for i := 1; i <= len(candidates)-1; i++ {
 		isec := intersect.Simple(r, candidates[i]).([]interface{})
-		for i, v := range isec {
-			r[i] = v.(string)
+		// Empty the slice
+		r = []string{}
+
+		// Refill with the intersection
+		for _, v := range isec {
+			r = append(r, v.(string))
 		}
 	}
 
