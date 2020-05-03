@@ -146,6 +146,27 @@ func Test_processFilteredNodes(t *testing.T) {
 	a2 := NewAgent(c)
 	a2.Start()
 
+	// Start another agent
+	ip3, returnFn3 := testutil.TakeIP()
+	defer returnFn3()
+	a3Addr := ip3.String()
+
+	c = DefaultConfig()
+	c.BindAddr = a3Addr
+	c.StartJoin = []string{a1Addr + ":8946"}
+	c.NodeName = "test3"
+	c.Server = false
+	c.LogLevel = logLevel
+	c.Tags = map[string]string{
+		"tag":   "test_client",
+		"extra": "tag",
+	}
+	c.DevMode = true
+	c.DataDir = dir
+
+	a3 := NewAgent(c)
+	a3.Start()
+
 	time.Sleep(2 * time.Second)
 
 	job := &Job{
@@ -177,18 +198,33 @@ func Test_processFilteredNodes(t *testing.T) {
 	assert.Len(t, nodes, 1)
 
 	job3 := &Job{
-		Name: "test_job_2",
+		Name: "test_job_3",
 	}
 
 	nodes, _, err = a1.processFilteredNodes(job3)
 	require.NoError(t, err)
 
-	assert.Len(t, nodes, 2)
+	assert.Len(t, nodes, 3)
 	assert.Contains(t, nodes, "test1")
 	assert.Contains(t, nodes, "test2")
+	assert.Contains(t, nodes, "test3")
+
+	job4 := &Job{
+		Name: "test_job_4",
+		Tags: map[string]string{
+			"tag": "test_client:1",
+		},
+	}
+
+	nodes, _, err = a1.processFilteredNodes(job4)
+	require.NoError(t, err)
+
+	assert.Len(t, nodes, 1)
+	assert.Contains(t, nodes, "test3")
 
 	a1.Stop()
 	a2.Stop()
+	a3.Stop()
 }
 
 func TestEncrypt(t *testing.T) {
